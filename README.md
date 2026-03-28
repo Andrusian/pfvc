@@ -6,7 +6,7 @@ challenging to get working a few years ago. But I was unaware of this and the ac
 PulseAudio Volume Control got purged from my system.
 
 PipeWire works great but I noticed that Plasma desktop widgets have a few issues. In particular, I needed fine volume control. The Plasma widget for PipeWire has a bug: 
-it does a drag even rather than moving the slider slowly. Yes, I could have used cursor controls, but this is a multi-window usage and it wasn't convenient.
+it does a drag (of whole window) even rather than moving the slider slowly. Yes, I could have used cursor controls, but this is a multi-window usage and it wasn't convenient.
 And yes, I submitted a bug report on the problem.
 
 What I wanted was a fine volume control with small increments and could handle several output devices at once. It should also allow remapping of application streams
