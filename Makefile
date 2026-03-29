@@ -1,5 +1,6 @@
 CXX      := g++
 MOC      := /usr/lib/qt6/libexec/moc
+RCC      := /usr/lib/qt6/libexec/rcc
 TARGET   := pfvc
 
 # pkg-config flags
@@ -28,9 +29,18 @@ MOC_HEADERS := MainWindow.h \
 
 MOC_SRCS    := $(addprefix moc/moc_,$(notdir $(MOC_HEADERS:.h=.cpp)))
 
-OBJS := $(SRCS:.cpp=.o) $(MOC_SRCS:.cpp=.o)
+# Resource file
+RCC_SRC  := moc/qrc_resources.cpp
 
-.PHONY: all clean
+OBJS := $(SRCS:.cpp=.o) $(MOC_SRCS:.cpp=.o) $(RCC_SRC:.cpp=.o)
+
+# Install paths — override with: make install PREFIX=/usr
+PREFIX      := /usr/local
+BINDIR      := $(PREFIX)/bin
+ICONDIR     := /usr/share/icons/hicolor/scalable/apps
+DESKTOPDIR  := /usr/share/applications
+
+.PHONY: all clean install uninstall
 
 all: moc_dir $(TARGET)
 
@@ -52,6 +62,10 @@ moc/%.o: moc/%.cpp
 moc/moc_%.cpp: %.h
 	$(MOC) $(QT_CFLAGS) $< -o $@
 
+# Generate rcc file from resources.qrc
+$(RCC_SRC): resources.qrc pfvc_logo.svg
+	$(RCC) $< -o $@
+
 # Header dependencies (simple)
 main.o:       main.cpp MainWindow.h Config.h
 MainWindow.o: MainWindow.cpp MainWindow.h StreamBlock.h Config.h
@@ -63,5 +77,23 @@ moc/moc_MainWindow.o: moc/moc_MainWindow.cpp MainWindow.h
 moc/moc_StreamBlock.o: moc/moc_StreamBlock.cpp StreamBlock.h
 moc/moc_PlaybackBlock.o: moc/moc_PlaybackBlock.cpp PlaybackBlock.h
 
+install: all
+	@echo "Installing binary..."
+	install -Dm755 $(TARGET) $(DESTDIR)$(BINDIR)/$(TARGET)
+	@echo "Installing icon..."
+	install -Dm644 pfvc_logo.svg $(DESTDIR)$(ICONDIR)/pfvc.svg
+	@echo "Installing desktop entry..."
+	install -Dm644 pfvc.desktop $(DESTDIR)$(DESKTOPDIR)/pfvc.desktop
+	@echo "Updating icon cache..."
+	-gtk-update-icon-cache /usr/share/icons/hicolor/ 2>/dev/null || true
+	@echo "Done. You may need to log out and back in for the icon to appear."
+
+uninstall:
+	rm -f $(DESTDIR)$(BINDIR)/$(TARGET)
+	rm -f $(DESTDIR)$(ICONDIR)/pfvc.svg
+	rm -f $(DESTDIR)$(DESKTOPDIR)/pfvc.desktop
+	-gtk-update-icon-cache /usr/share/icons/hicolor/ 2>/dev/null || true
+	@echo "Uninstalled."
+
 clean:
-	rm -f $(TARGET) *.o moc/*.o moc/moc_*.cpp
+	rm -f $(TARGET) *.o moc/*.o moc/moc_*.cpp moc/qrc_resources.cpp

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=PipeWire Fine Volume Control
+Comment=Fine-grained PipeWire volume control
+Exec=/usr/local/bin/pfvc
+Icon=pfvc
+Categories=AudioVideo;Audio;Mixer;
+Terminal=false
