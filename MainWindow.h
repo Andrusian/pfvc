@@ -55,6 +55,7 @@ private:
     QWidget* m_playbackTab;
     QVBoxLayout* m_playbackLayout;
     QMap<uint32_t, PlaybackBlock*> m_playbackBlocks;
+    bool m_initialSyncDone = false;
 
 protected:
     void closeEvent(QCloseEvent* event) override;

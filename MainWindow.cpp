@@ -96,8 +96,8 @@ void MainWindow::buildPlaybackTab() {
     auto* container  = new QWidget();
     m_playbackLayout = new QVBoxLayout(container);
     m_playbackLayout->setContentsMargins(6, 6, 6, 6);
-    m_playbackLayout->setSpacing(8);
-    m_playbackLayout->addStretch();
+    m_playbackLayout->setSpacing(0);
+    m_playbackLayout->setAlignment(Qt::AlignTop);
 
     scroll->setWidget(container);
     scroll->setWidgetResizable(true);
@@ -143,6 +143,10 @@ void MainWindow::onNodeAdded(PwNodeInfo info) {
             
         m_playbackLayout->addWidget(block);
         m_playbackBlocks[info.id] = block;
+        
+        // Set initial routing if we already know it
+        if (info.targetId != 0)
+          block->setCurrentSink(info.targetId);
 
     }
 }
@@ -220,6 +224,11 @@ void MainWindow::onNodePeakChanged(QString nodeName, float peakL, float peakR) {
 
 void MainWindow::onSyncDone() {
     qDebug() << "PipeWire sync complete.";
+    for (auto it = m_playbackBlocks.begin(); it != m_playbackBlocks.end(); ++it) {
+        uint32_t targetId = m_pw->streamTargetId(it.key());
+        if (targetId != 0)
+            it.value()->setCurrentSink(targetId);
+    }
 }
 
 void MainWindow::addSinkBlock(const PwNodeInfo& info) {

@@ -15,7 +15,7 @@ PlaybackBlock::PlaybackBlock(const PwNodeInfo& info, const QList<PwNodeInfo>& si
     row1->setSpacing(4);
 
     m_muteBtn = new QPushButton("Mute", this);
-    m_muteBtn->setFixedSize(48, 22);
+    m_muteBtn->setFixedSize(60, 25);
     row1->addWidget(m_muteBtn);
 
     m_nameLabel = new QLabel(info.name, this);

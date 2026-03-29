@@ -1,9 +1,11 @@
 #include "PipeWireManager.h"
 #include <QDebug>
 #include <QProcess>
+#include <QRegularExpression>
 #include <cmath>
 
 #include <pipewire/pipewire.h>
+#include <pipewire/extensions/metadata.h>
 #include <spa/param/audio/format-utils.h>
 #include <spa/param/props.h>
 #include <spa/pod/builder.h>
@@ -104,6 +106,11 @@ void PipeWireManager::stop() {
         destroyNodeProxy(id);
     m_nodes.clear();
 
+    if (m_metadata) {
+        spa_hook_remove(&m_metadataListener);
+        pw_proxy_destroy(reinterpret_cast<struct pw_proxy*>(m_metadata));
+        m_metadata = nullptr;
+    }
     if (m_registry) {
         pw_proxy_destroy(reinterpret_cast<struct pw_proxy*>(m_registry));
         m_registry = nullptr;
@@ -132,6 +139,11 @@ QList<PwNodeInfo> PipeWireManager::knownSinks() const {
     return result;
 }
 
+uint32_t PipeWireManager::streamTargetId(uint32_t streamId) const {
+    auto* np = m_nodes.value(streamId, nullptr);
+    return np ? np->info.targetId : 0;
+}
+
 void PipeWireManager::setNodeVolume(uint32_t id, float volume) {
     float clamped = qBound(0.0f, volume, 1.0f);
     QProcess::startDetached("wpctl",
@@ -147,6 +159,13 @@ void PipeWireManager::setNodeMute(uint32_t id, bool mute) {
           mute ? "1" : "0" });
 }
 
+void PipeWireManager::moveStream(uint32_t streamId, uint32_t targetSinkId) {
+    QProcess::startDetached("pw-metadata",
+        { QString::number(streamId),
+          "target.node",
+          QString::number(targetSinkId) });
+}
+
 void PipeWireManager::onPipeWireFdReady() {
     pw_loop_iterate(m_loop, 0);
 }
@@ -160,40 +179,55 @@ void PipeWireManager::onPeakTimer() {
     }
 }
 
-void PipeWireManager::onRegistryGlobal(void* data, uint32_t id, uint32_t permissions, 
-                                       const char* type, uint32_t version, 
-                                       const struct spa_dict* props) 
+void PipeWireManager::onRegistryGlobal(void* data, uint32_t id, uint32_t permissions,
+                                        const char* type, uint32_t version,
+                                        const struct spa_dict* props)
 {
-    // 1. This line must be at the very top to fix the 'self' error
     auto* self = static_cast<PipeWireManager*>(data);
-    (void)permissions; // Silence unused warning
-    (void)version;     // Silence unused warning
+    (void)permissions;
+    (void)version;
 
-    // 2. Only look at Nodes
+    // Handle Metadata objects — must come before the Node-only early return
+    if (qstrcmp(type, PW_TYPE_INTERFACE_Metadata) == 0) {
+        const char* mdName = props ? spa_dict_lookup(props, "metadata.name") : nullptr;
+        qDebug() << "Registry: Metadata id=" << id << "name=" << (mdName ? mdName : "null");
+        if (mdName && qstrcmp(mdName, "default") == 0 && !self->m_metadata) {
+            self->m_metadata = static_cast<struct pw_metadata*>(
+                pw_registry_bind(self->m_registry, id,
+                                 PW_TYPE_INTERFACE_Metadata,
+                                 PW_VERSION_METADATA, 0));
+            if (self->m_metadata) {
+                self->m_metadataEvents = {};
+                self->m_metadataEvents.version  = PW_VERSION_METADATA_EVENTS;
+                self->m_metadataEvents.property = &PipeWireManager::onMetadataProperty;
+                pw_metadata_add_listener(self->m_metadata,
+                                         &self->m_metadataListener,
+                                         &self->m_metadataEvents, self);
+                qDebug() << "  → default metadata bound successfully";
+            } else {
+                qWarning() << "  → failed to bind default metadata";
+            }
+        }
+        return;
+    }
+
+    // From here on, only handle Nodes
     if (qstrcmp(type, PW_TYPE_INTERFACE_Node) != 0) {
         return;
     }
 
-    // 3. Filter by Media Class (Sinks and Playback Streams)
-    // This fixes the 'isInteresting' warning
     const char* mediaClass = spa_dict_lookup(props, PW_KEY_MEDIA_CLASS);
     if (!isInteresting(mediaClass)) {
         return;
     }
 
-    // 4. Ignore our own internal VU meter monitor streams
-    // This prevents the "duplicate player" issue
     const char* appName = spa_dict_lookup(props, PW_KEY_APP_NAME);
     if (appName && QString::fromUtf8(appName) == "PipeWire Fine Volume") {
-        return; 
+        return;
     }
 
-    // 5. If it passed all filters, subscribe to it
     self->subscribeToNode(id, props);
 }
-
-
-
 
 void PipeWireManager::onRegistryGlobalRemove(void* data, uint32_t id) {
     auto* self = static_cast<PipeWireManager*>(data);
@@ -203,8 +237,7 @@ void PipeWireManager::onRegistryGlobalRemove(void* data, uint32_t id) {
 
     self->destroyNodeProxy(id);
     self->m_nodes.remove(id);
-    
-    // Send both ID and Name so MainWindow can clean up both maps
+
     emit self->nodeRemoved(id, nodeName);
 }
 
@@ -212,6 +245,69 @@ void PipeWireManager::onCoreDone(void* data, uint32_t id, int seq) {
     auto* self = static_cast<PipeWireManager*>(data);
     if (id == PW_ID_CORE && seq == self->m_syncSeq)
         emit self->syncDone();
+}
+
+int PipeWireManager::onMetadataProperty(void* data, uint32_t subject,
+                                         const char* key, const char* type,
+                                         const char* value)
+{
+    auto* self = static_cast<PipeWireManager*>(data);
+    (void)type;
+
+    if (!key) return 0;
+
+    // Track the default sink name so we can resolve -1 routing
+    if (qstrcmp(key, "default.audio.sink") == 0 && value) {
+        // value is JSON: {"name":"alsa_output.xxx"}
+        QRegularExpression re("\"name\"\\s*:\\s*\"([^\"]+)\"");
+        auto match = re.match(QString::fromUtf8(value));
+        if (match.hasMatch()) {
+            self->m_defaultSinkName = match.captured(1);
+            qDebug() << "Default sink updated to:" << self->m_defaultSinkName;
+        }
+        return 0;
+    }
+
+    if (qstrcmp(key, "target.node") != 0) return 0;
+
+    int parsed = value ? atoi(value) : -1;
+    qDebug() << "META target.node subject=" << subject << "value=" << (value ? value : "null") << "parsed=" << parsed;
+
+    if (!self->m_nodes.contains(subject)) return 0;
+    NodeProxy* np = self->m_nodes[subject];
+    if (np->info.mediaClass != "Stream/Output/Audio") return 0;
+
+    uint32_t targetId = 0;
+
+    if (parsed <= 0) {
+        // -1 means "route to default sink"
+        for (const auto& sink : self->knownSinks()) {
+            if (sink.nodeName == self->m_defaultSinkName) {
+                targetId = sink.id;
+                break;
+            }
+        }
+        // Fall back to first known sink if default not found
+        if (targetId == 0) {
+            QList<PwNodeInfo> sinks = self->knownSinks();
+            if (!sinks.isEmpty())
+                targetId = sinks.first().id;
+        }
+        qDebug() << "  → resolved -1 to default sink id=" << targetId
+                 << "(" << self->m_defaultSinkName << ")";
+    } else {
+        targetId = static_cast<uint32_t>(parsed);
+    }
+
+    if (targetId == 0) return 0;
+
+    // Always emit — don't guard on targetId change since the previous
+    // value may have been stale from startup
+    np->info.targetId = targetId;
+    qDebug() << "  → emitting nodeRoutingChanged" << subject << "->" << targetId;
+    emit self->nodeRoutingChanged(subject, targetId);
+
+    return 0;
 }
 
 void PipeWireManager::subscribeToNode(uint32_t id, const struct spa_dict* props) {
@@ -226,6 +322,7 @@ void PipeWireManager::subscribeToNode(uint32_t id, const struct spa_dict* props)
     np->info.mediaClass = QString::fromUtf8(spa_dict_lookup(props, "media.class") ?: "");
     np->info.volume     = 1.0f;
     np->info.muted      = false;
+    np->info.targetId   = 0;
     np->peakL.store(0.0f);
     np->peakR.store(0.0f);
 
@@ -258,17 +355,15 @@ void PipeWireManager::createMonitorStream(NodeProxy* np) {
 
     const QByteArray streamName = ("pfvc-mon:" + np->info.nodeName).toUtf8();
 
-    // CRITICAL: pw_stream_new takes ownership of 'props'. 
-    // Do NOT call pw_properties_free(props) after this.
     np->monStream = pw_stream_new(m_core, streamName.constData(), props);
 
     if (!np->monStream) {
         qWarning() << "Failed to create monitor stream for node" << np->info.nodeName;
-        if (props) pw_properties_free(props); // Free only if creation failed
+        if (props) pw_properties_free(props);
         return;
     }
 
-    np->monStreamEvents          = {};
+    np->monStreamEvents               = {};
     np->monStreamEvents.version       = PW_VERSION_STREAM_EVENTS;
     np->monStreamEvents.state_changed = &PipeWireManager::onStreamStateChanged;
     np->monStreamEvents.process       = &PipeWireManager::onStreamProcess;
@@ -319,14 +414,6 @@ void PipeWireManager::onNodeInfo(void* data, const struct pw_node_info* info) {
         if (nn && *nn && np->info.nodeName == QString::number(np->id))
             np->info.nodeName = QString::fromUtf8(nn);
     }
-
-    const char* target = info->props ? spa_dict_lookup(info->props, PW_KEY_NODE_TARGET) : nullptr;
-    uint32_t newTarget = (target && *target) ? static_cast<uint32_t>(atoi(target)) : 0;
-    if (np->announced && newTarget != 0 && newTarget != np->info.targetId) {
-        np->info.targetId = newTarget;
-        emit np->mgr->nodeRoutingChanged(np->id, newTarget);
-    }
-    
     if (!np->announced) {
         np->announced = true;
         emit np->mgr->nodeAdded(np->info);
@@ -415,22 +502,14 @@ void PipeWireManager::onStreamProcess(void* data) {
     pw_stream_queue_buffer(np->monStream, pwBuf);
 }
 
-void PipeWireManager::onStreamStateChanged(void* data, enum pw_stream_state old_state, enum pw_stream_state new_state, const char* error) {
+void PipeWireManager::onStreamStateChanged(void* data, enum pw_stream_state old_state,
+                                            enum pw_stream_state new_state, const char* error) {
     auto* np = static_cast<NodeProxy*>(data);
-    qDebug() << "Monitor stream" << np->info.nodeName 
-             << "state:" << pw_stream_state_as_string(old_state) 
+    qDebug() << "Monitor stream" << np->info.nodeName
+             << "state:" << pw_stream_state_as_string(old_state)
              << "->" << pw_stream_state_as_string(new_state);
-    
+
     if (new_state == PW_STREAM_STATE_ERROR && error) {
         qWarning() << "Monitor stream error:" << error;
     }
 }
-
-void PipeWireManager::moveStream(uint32_t streamId, uint32_t targetSinkId) {
-  // Using pactl move-sink-input [STREAM_ID] [SINK_ID]
-    QStringList args = { "move-sink-input", QString::number(streamId), QString::number(targetSinkId) };
-    
-    qDebug() << "[DEBUG] Executing: pactl" << args.join(" ");
-    QProcess::startDetached("pactl", args);
-}
-
