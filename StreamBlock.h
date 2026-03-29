@@ -69,18 +69,12 @@ class StreamBlock : public QWidget {
     Q_OBJECT
 
 public:
-    // nodeName  — stable node.name string, used as config key and signal id
-    // pwId      — current session numeric PipeWire id, used for wpctl calls
-    // displayName — human-readable label shown in the UI
     explicit StreamBlock(const QString& nodeName,
                          uint32_t       pwId,
                          const QString& displayName,
                          QWidget*       parent = nullptr);
 
-    // The stable key (node.name) — used in all signals and map lookups
     QString  nodeName() const { return m_nodeName; }
-
-    // The current PipeWire numeric id — may change on hot-plug
     uint32_t pwId()     const { return m_pwId; }
     void     setPwId(uint32_t id) { m_pwId = id; }
 
@@ -93,7 +87,6 @@ public:
     void setVuLevel(int levelL, int levelR);
 
 signals:
-    // Both signals carry the stable nodeName as the id string
     void volumeChangeRequested(const QString& nodeName, int newVolume);
     void muteRequested(const QString& nodeName, bool mute);
 
@@ -110,14 +103,14 @@ private slots:
     void onDec5();
     void onBoostPressed();
     void onBoostReleased();
-    void onMute();
+    void onZero();
 
 private:
     void applyVolume();
     void buildUi(const QString& displayName);
 
-    QString      m_nodeName;            // stable key
-    uint32_t     m_pwId       = 0;      // session-local PW id
+    QString      m_nodeName;
+    uint32_t     m_pwId       = 0;
     int          m_volume     = 100;
     int          m_preBoost   = 100;
     bool         m_muted      = false;
@@ -132,6 +125,6 @@ private:
     QPushButton* m_inc5       = nullptr;
     QPushButton* m_dec5       = nullptr;
     QPushButton* m_boost      = nullptr;
-    QPushButton* m_muteBtn    = nullptr;
+    QPushButton* m_zeroBtn    = nullptr;   // replaces muteBtn
     VuBar*       m_vuBar      = nullptr;
 };

@@ -15,23 +15,14 @@ StreamBlock::StreamBlock(const QString& nodeName,
     buildUi(displayName);
 }
 
-
 void StreamBlock::setMuted(bool muted) {
-    // Update the button text or appearance
-    m_muteBtn->setText(muted ? "Unmute" : "Mute");
-    
-    // Visually "dim" the slider if muted
-    // m_vuBar->setEnabled(!muted);
-    
-    // You could also change the button stylesheet to make it red when muted
+    m_muted = muted;
     if (muted) {
-        m_muteBtn->setStyleSheet("background-color: #552222; color: white;");
+        m_volDisplay->setText("MUT");
     } else {
-        m_muteBtn->setStyleSheet("");
+        applyVolume();
     }
 }
-
-
 
 void StreamBlock::buildUi(const QString& displayName) {
     auto* outer = new QVBoxLayout(this);
@@ -45,6 +36,7 @@ void StreamBlock::buildUi(const QString& displayName) {
     auto* row = new QHBoxLayout();
     row->setSpacing(4);
 
+    // Volume readout
     m_volDisplay = new QLabel("100%", this);
     m_volDisplay->setFixedWidth(52);
     m_volDisplay->setAlignment(Qt::AlignCenter);
@@ -53,35 +45,44 @@ void StreamBlock::buildUi(const QString& displayName) {
         "font-weight: bold; padding: 2px; border-radius: 3px;");
     row->addWidget(m_volDisplay);
 
+    // Zero button — momentary, sets volume to 0
+    m_zeroBtn = new QPushButton("Zero", this);
+    m_zeroBtn->setFixedSize(42, 46);
+    m_zeroBtn->setStyleSheet("background-color: #444444; color: white;");
+    row->addWidget(m_zeroBtn);
+
+    // +1 / -1 buttons — twice as wide
     auto* col1 = new QVBoxLayout();
     col1->setSpacing(2);
     m_inc1 = new QPushButton("+1", this);
     m_dec1 = new QPushButton("-1", this);
-    m_inc1->setFixedSize(34, 22);
-    m_dec1->setFixedSize(34, 22);
+    m_inc1->setFixedSize(68, 22);
+    m_dec1->setFixedSize(68, 22);
+    m_inc1->setStyleSheet("background-color: #2d6e2d; color: white; font-weight: bold;");
+    m_dec1->setStyleSheet("background-color: #8b4500; color: white; font-weight: bold;");
     col1->addWidget(m_inc1);
     col1->addWidget(m_dec1);
     row->addLayout(col1);
 
+    // +5 / -5 buttons
     auto* col2 = new QVBoxLayout();
     col2->setSpacing(2);
     m_inc5 = new QPushButton("+5", this);
     m_dec5 = new QPushButton("-5", this);
     m_inc5->setFixedSize(34, 22);
     m_dec5->setFixedSize(34, 22);
+    m_inc5->setStyleSheet("background-color: #2d6e2d; color: white; font-weight: bold;");
+    m_dec5->setStyleSheet("background-color: #8b4500; color: white; font-weight: bold;");
     col2->addWidget(m_inc5);
     col2->addWidget(m_dec5);
     row->addLayout(col2);
 
+    // Boost button
     m_boost = new QPushButton("Boost", this);
     m_boost->setFixedHeight(46);
     m_boost->setAutoRepeat(false);
     m_boost->setCheckable(false);
     row->addWidget(m_boost);
-
-    m_muteBtn = new QPushButton("Mute", this);
-    m_muteBtn->setFixedHeight(46);
-    row->addWidget(m_muteBtn);
 
     row->addStretch();
     outer->addLayout(row);
@@ -95,7 +96,7 @@ void StreamBlock::buildUi(const QString& displayName) {
     connect(m_dec5,    &QPushButton::clicked,  this, &StreamBlock::onDec5);
     connect(m_boost,   &QPushButton::pressed,  this, &StreamBlock::onBoostPressed);
     connect(m_boost,   &QPushButton::released, this, &StreamBlock::onBoostReleased);
-    connect(m_muteBtn, &QPushButton::clicked,  this, &StreamBlock::onMute);
+    connect(m_zeroBtn, &QPushButton::clicked,  this, &StreamBlock::onZero);
 
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     applyVolume();
@@ -104,7 +105,6 @@ void StreamBlock::buildUi(const QString& displayName) {
 void StreamBlock::setVolume(int vol) {
     int clamped = qBound(0, vol, 100);
     if (m_muted) {
-        // Keep muted state; just update the restore value
         m_preMute = clamped;
     } else {
         m_volume = clamped;
@@ -157,33 +157,29 @@ void StreamBlock::keyPressEvent(QKeyEvent* event) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Button slots — all signals carry m_nodeName (stable key)
-// ---------------------------------------------------------------------------
-
 void StreamBlock::onInc1() {
-    if (m_muted) { m_muted = false; m_muteBtn->setText("Mute"); emit muteRequested(m_nodeName, false); }
+    if (m_muted) { m_muted = false; emit muteRequested(m_nodeName, false); }
     m_volume = qMin(100, m_volume + 1);
     applyVolume();
     emit volumeChangeRequested(m_nodeName, m_volume);
 }
 
 void StreamBlock::onDec1() {
-    if (m_muted) { m_muted = false; m_muteBtn->setText("Mute"); emit muteRequested(m_nodeName, false); }
+    if (m_muted) { m_muted = false; emit muteRequested(m_nodeName, false); }
     m_volume = qMax(0, m_volume - 1);
     applyVolume();
     emit volumeChangeRequested(m_nodeName, m_volume);
 }
 
 void StreamBlock::onInc5() {
-    if (m_muted) { m_muted = false; m_muteBtn->setText("Mute"); emit muteRequested(m_nodeName, false); }
+    if (m_muted) { m_muted = false; emit muteRequested(m_nodeName, false); }
     m_volume = qMin(100, m_volume + 5);
     applyVolume();
     emit volumeChangeRequested(m_nodeName, m_volume);
 }
 
 void StreamBlock::onDec5() {
-    if (m_muted) { m_muted = false; m_muteBtn->setText("Mute"); emit muteRequested(m_nodeName, false); }
+    if (m_muted) { m_muted = false; emit muteRequested(m_nodeName, false); }
     m_volume = qMax(0, m_volume - 5);
     applyVolume();
     emit volumeChangeRequested(m_nodeName, m_volume);
@@ -202,18 +198,7 @@ void StreamBlock::onBoostReleased() {
     emit volumeChangeRequested(m_nodeName, m_volume);
 }
 
-void StreamBlock::onMute() {
-    if (!m_muted) {
-        m_preMute = m_volume;
-        m_muted   = true;
-        m_muteBtn->setText("Unmute");
-        m_volDisplay->setText("MUT");
-        emit muteRequested(m_nodeName, true);
-    } else {
-        m_muted  = false;
-        m_volume = m_preMute;
-        m_muteBtn->setText("Mute");
-        applyVolume();
-        emit muteRequested(m_nodeName, false);
-    }
+void StreamBlock::onZero() {
+    // Momentary — just emit volume 0, do not latch any mute state
+    emit volumeChangeRequested(m_nodeName, 0);
 }

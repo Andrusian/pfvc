@@ -341,8 +341,10 @@ void PipeWireManager::subscribeToNode(uint32_t id, const struct spa_dict* props)
 
     m_nodes[id] = np;
 
-    if (np->info.mediaClass == "Audio/Sink")
-        createMonitorStream(np);
+    if (np->info.mediaClass == "Audio/Sink" ||
+        np->info.mediaClass == "Stream/Output/Audio") {
+      createMonitorStream(np);
+    }
 }
 
 void PipeWireManager::createMonitorStream(NodeProxy* np) {

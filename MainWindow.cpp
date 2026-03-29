@@ -143,6 +143,7 @@ void MainWindow::onNodeAdded(PwNodeInfo info) {
             
         m_playbackLayout->addWidget(block);
         m_playbackBlocks[info.id] = block;
+        m_playbackNameToId[info.nodeName] = info.id;
         
         // Set initial routing if we already know it
         if (info.targetId != 0)
@@ -170,6 +171,7 @@ void MainWindow::onNodeRemoved(uint32_t id, QString nodeName) {
         PlaybackBlock* block = m_playbackBlocks.take(id);
         m_playbackLayout->removeWidget(block);
         block->deleteLater();
+        m_playbackNameToId.remove(nodeName);
     }
     
 }
@@ -200,27 +202,29 @@ void MainWindow::onNodeVolumeChanged(uint32_t id, float volume, bool muted) {
     }
 }
 
+
 void MainWindow::onNodePeakChanged(QString nodeName, float peakL, float peakR) {
+    // Sink blocks
     if (m_sinkBlocks.contains(nodeName)) {
+        StreamBlock* block = m_sinkBlocks[nodeName];
+        float volumeFactor = block->isMuted() ? 0.0f : (static_cast<float>(block->volume()) / 100.0f);
+        int pctL = qBound(0, qRound(peakL * volumeFactor * 100.0f), 100);
+        int pctR = qBound(0, qRound(peakR * volumeFactor * 100.0f), 100);
+        block->setVuLevel(pctL, pctR);
+        return;
+    }
 
-      StreamBlock* block = m_sinkBlocks[nodeName];
-      // 1. Calculate the scaling factor (0.0 to 1.0)
-      // If the device is muted, the output volume is effectively 0
-      
-      float volumeFactor = block->isMuted() ? 0.0f : (static_cast<float>(block->volume()) / 100.0f);
-
-      // 2. Scale the raw peaks by the volume factor
-      float scaledL = peakL * volumeFactor;
-      float scaledR = peakR * volumeFactor;
-
-      // 3. Convert to 0-100 scale for the UI, with safety bounds
-      int pctL = qBound(0, qRound(scaledL * 100.0f), 100);
-      int pctR = qBound(0, qRound(scaledR * 100.0f), 100);
-
-      block->setVuLevel(pctL, pctR);
-
+    // Playback blocks — looked up by nodeName
+    if (m_playbackNameToId.contains(nodeName)) {
+        PlaybackBlock* pb = m_playbackBlocks.value(m_playbackNameToId[nodeName], nullptr);
+        if (pb) {
+            int pctL = qBound(0, qRound(peakL * 100.0f), 100);
+            int pctR = qBound(0, qRound(peakR * 100.0f), 100);
+            pb->setVuLevel(pctL, pctR);
+        }
     }
 }
+
 
 void MainWindow::onSyncDone() {
     qDebug() << "PipeWire sync complete.";

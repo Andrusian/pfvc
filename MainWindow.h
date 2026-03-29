@@ -56,6 +56,7 @@ private:
     QVBoxLayout* m_playbackLayout;
     QMap<uint32_t, PlaybackBlock*> m_playbackBlocks;
     bool m_initialSyncDone = false;
+    QMap<QString, uint32_t> m_playbackNameToId;
 
 protected:
     void closeEvent(QCloseEvent* event) override;
