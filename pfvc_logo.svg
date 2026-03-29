@@ -1,0 +1,21 @@
+<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect x="0" y="0" width="48" height="48" rx="10" fill="#1e1e2e"></rect>
+
+  <!-- Speaker -->
+  <polygon points="10,18 16,18 22,12 22,36 16,30 10,30" fill="#cdd6f4"></polygon>
+
+  <!-- Sound waves -->
+  <path d="M26 18 Q30 24 26 30" stroke="#89b4fa" stroke-width="2" fill="none"></path>
+  <path d="M29 15 Q36 24 29 33" stroke="#89b4fa" stroke-width="2" fill="none" opacity="0.7"></path>
+
+  <!-- Fine control sliders -->
+  <line x1="34" y1="12" x2="34" y2="36" stroke="#a6e3a1" stroke-width="2"></line>
+  <circle cx="34" cy="20" r="3" fill="#a6e3a1"></circle>
+
+  <line x1="39" y1="12" x2="39" y2="36" stroke="#f9e2af" stroke-width="2"></line>
+  <circle cx="39" cy="28" r="3" fill="#f9e2af"></circle>
+
+  <!-- Subtle waveform line -->
+  <path d="M8 40 L12 38 L16 42 L20 37 L24 41 L28 39 L32 42 L36 38 L40 40" stroke="#6c7086" stroke-width="1.5" fill="none" opacity="0.6"></path>
+</svg>
