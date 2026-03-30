@@ -40,20 +40,20 @@ bool PipeWireManager::start() {
 
     m_mainLoop = pw_main_loop_new(nullptr);
     if (!m_mainLoop) {
-        qWarning() << "PipeWireManager: failed to create main loop";
+      //qWarning() << "PipeWireManager: failed to create main loop";
         return false;
     }
     m_loop = pw_main_loop_get_loop(m_mainLoop);
 
     m_context = pw_context_new(m_loop, nullptr, 0);
     if (!m_context) {
-        qWarning() << "PipeWireManager: failed to create context";
+      //qWarning() << "PipeWireManager: failed to create context";
         return false;
     }
 
     m_core = pw_context_connect(m_context, nullptr, 0);
     if (!m_core) {
-        qWarning() << "PipeWireManager: failed to connect to PipeWire daemon";
+      //qWarning() << "PipeWireManager: failed to connect to PipeWire daemon";
         return false;
     }
 
@@ -190,7 +190,7 @@ void PipeWireManager::onRegistryGlobal(void* data, uint32_t id, uint32_t permiss
     // Handle Metadata objects — must come before the Node-only early return
     if (qstrcmp(type, PW_TYPE_INTERFACE_Metadata) == 0) {
         const char* mdName = props ? spa_dict_lookup(props, "metadata.name") : nullptr;
-        qDebug() << "Registry: Metadata id=" << id << "name=" << (mdName ? mdName : "null");
+        // qDebug() << "Registry: Metadata id=" << id << "name=" << (mdName ? mdName : "null");
         if (mdName && qstrcmp(mdName, "default") == 0 && !self->m_metadata) {
             self->m_metadata = static_cast<struct pw_metadata*>(
                 pw_registry_bind(self->m_registry, id,
@@ -203,9 +203,9 @@ void PipeWireManager::onRegistryGlobal(void* data, uint32_t id, uint32_t permiss
                 pw_metadata_add_listener(self->m_metadata,
                                          &self->m_metadataListener,
                                          &self->m_metadataEvents, self);
-                qDebug() << "  → default metadata bound successfully";
+                // qDebug() << "  → default metadata bound successfully";
             } else {
-                qWarning() << "  → failed to bind default metadata";
+              // qWarning() << "  → failed to bind default metadata";
             }
         }
         return;
@@ -263,7 +263,7 @@ int PipeWireManager::onMetadataProperty(void* data, uint32_t subject,
         auto match = re.match(QString::fromUtf8(value));
         if (match.hasMatch()) {
             self->m_defaultSinkName = match.captured(1);
-            qDebug() << "Default sink updated to:" << self->m_defaultSinkName;
+            // qDebug() << "Default sink updated to:" << self->m_defaultSinkName;
         }
         return 0;
     }
@@ -271,7 +271,7 @@ int PipeWireManager::onMetadataProperty(void* data, uint32_t subject,
     if (qstrcmp(key, "target.node") != 0) return 0;
 
     int parsed = value ? atoi(value) : -1;
-    qDebug() << "META target.node subject=" << subject << "value=" << (value ? value : "null") << "parsed=" << parsed;
+    // qDebug() << "META target.node subject=" << subject << "value=" << (value ? value : "null") << "parsed=" << parsed;
 
     if (!self->m_nodes.contains(subject)) return 0;
     NodeProxy* np = self->m_nodes[subject];
@@ -293,8 +293,8 @@ int PipeWireManager::onMetadataProperty(void* data, uint32_t subject,
             if (!sinks.isEmpty())
                 targetId = sinks.first().id;
         }
-        qDebug() << "  → resolved -1 to default sink id=" << targetId
-                 << "(" << self->m_defaultSinkName << ")";
+      //qDebug() << "  → resolved -1 to default sink id=" << targetId
+      //           << "(" << self->m_defaultSinkName << ")";
     } else {
         targetId = static_cast<uint32_t>(parsed);
     }
@@ -304,7 +304,7 @@ int PipeWireManager::onMetadataProperty(void* data, uint32_t subject,
     // Always emit — don't guard on targetId change since the previous
     // value may have been stale from startup
     np->info.targetId = targetId;
-    qDebug() << "  → emitting nodeRoutingChanged" << subject << "->" << targetId;
+    //qDebug() << "  → emitting nodeRoutingChanged" << subject << "->" << targetId;
     emit self->nodeRoutingChanged(subject, targetId);
 
     return 0;
@@ -507,11 +507,11 @@ void PipeWireManager::onStreamProcess(void* data) {
 void PipeWireManager::onStreamStateChanged(void* data, enum pw_stream_state old_state,
                                             enum pw_stream_state new_state, const char* error) {
     auto* np = static_cast<NodeProxy*>(data);
-    qDebug() << "Monitor stream" << np->info.nodeName
-             << "state:" << pw_stream_state_as_string(old_state)
-             << "->" << pw_stream_state_as_string(new_state);
+    //qDebug() << "Monitor stream" << np->info.nodeName
+    //         << "state:" << pw_stream_state_as_string(old_state)
+    //         << "->" << pw_stream_state_as_string(new_state);
 
     if (new_state == PW_STREAM_STATE_ERROR && error) {
-        qWarning() << "Monitor stream error:" << error;
+      //  qWarning() << "Monitor stream error:" << error;
     }
 }

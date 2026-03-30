@@ -178,7 +178,7 @@ void MainWindow::onNodeRemoved(uint32_t id, QString nodeName) {
 
 // Slot to handle the ComboBox change from a PlaybackBlock
 void MainWindow::onRoutingChanged(uint32_t streamId, uint32_t targetSinkId) {
-    qDebug() << "Routing stream" << streamId << "to sink" << targetSinkId;
+  // qDebug() << "Routing stream" << streamId << "to sink" << targetSinkId;
     m_pw->moveStream(streamId, targetSinkId);
 }
 
@@ -227,7 +227,7 @@ void MainWindow::onNodePeakChanged(QString nodeName, float peakL, float peakR) {
 
 
 void MainWindow::onSyncDone() {
-    qDebug() << "PipeWire sync complete.";
+  // qDebug() << "PipeWire sync complete.";
     for (auto it = m_playbackBlocks.begin(); it != m_playbackBlocks.end(); ++it) {
         uint32_t targetId = m_pw->streamTargetId(it.key());
         if (targetId != 0)
